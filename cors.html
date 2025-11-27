@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CORS Test - OpenRouter</title>
+</head>
+<body>
+<h1>CORS Test for OpenRouter</h1>
+<p>Check the console for results.</p>
+
+<script>
+async function testOpenRouterCORS() {
+    console.log("Starting CORS test...");
+
+    try {
+        const res = await fetch("https://api.openrouter.ai/v1/models", {
+            method: "GET"
+        });
+
+        console.log("Response object:", res);
+
+        const text = await res.text();
+        console.log("Raw response body:", text);
+
+        document.body.innerHTML += "<pre>" + text + "</pre>";
+    } 
+    catch (error) {
+        console.error("Fetch error:", error);
+        document.body.innerHTML += "<p style='color:red;'>Fetch error: " + error + "</p>";
+    }
+}
+
+testOpenRouterCORS();
+</script>
+
+</body>
+</html>
