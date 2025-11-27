@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>OpenRouter Llama — AI-drawn Stickman (Full)</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: Inter, Arial, sans-serif; margin: 20px; color:#111; }
+    h1 { font-size: 20px; margin-bottom: 6px; }
+    #controls { display:flex; gap:8px; align-items:center; margin-bottom:10px; }
+    #userInput { flex:1; padding:8px; font-size:14px; border:1px solid #ccc; border-radius:6px; }
+    button { padding:8px 12px; font-size:14px; border-radius:6px; cursor:pointer; }
+    #stickwrap { display:flex; gap:16px; align-items:flex-start; }
+    canvas { background: #fff; border:1px solid #ccc; border-radius:6px; }
+    #log { width: 420px; height: 360px; overflow:auto; padding:8px; font-family: monospace; font-size:12px; border:1px solid #eee; background:#fafafa; border-radius:6px; }
+    #key { width:420px; padding:8px; font-size:13px; border-radius:6px; border:1px solid #ddd; }
+    .small { font-size:12px; color:#666; margin-top:6px; }
+    footer { margin-top:14px; font-size:12px; color:#666 }
+  </style>
+</head>
+<body>
+  <h1>OpenRouter (Llama) — AI-drawn Stickman (Full)</h1>
+
+  <div class="small">Important: paste your OpenRouter key into the variable inside this file on your computer. Do not paste keys into public places.</div>
+
+  <!-- Paste your key locally into the variable below (replace YOUR_KEY_HERE) -->
+  <script>
+    // ========== PLACEHOLDER FOR YOUR KEY =============
+    // Replace the string below with your OpenRouter API key on your machine ONLY.
+    // Example: const OPENROUTER_API_KEY = "sk-or-xxxx...";
+    const OPENROUTER_API_KEY = "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";
+    // ==================================================
+
+    // Model & endpoint
+    const MODEL = "meta-llama/llama-3.1-8b-instruct";
+    const API_URL = "https://api.openrouter.ai/v1/chat/completions";
+  </script>
+
+  <div id="stickwrap" style="margin-top:12px;">
+    <div>
+      <canvas id="stickman" width="500" height="360"></canvas>
+
+      <div id="controls" style="margin-top:8px; width:500px;">
+        <input id="userInput" placeholder="Tell the AI how to pose the stickman (e.g. 'look surprised and put left arm up')" />
+        <button id="sendBtn">Send</button>
+        <button id="exampleBtn">Example</button>
+      </div>
+      <div class="small">Smooth transition duration (ms): <input id="dur" value="500" style="width:70px; padding:4px; margin-left:6px; border-radius:6px; border:1px solid #ccc;" /></div>
+    </div>
+
+    <div>
+      <div id="log">Log & last JSON response will appear here.</div>
+    </div>
+  </div>
+
+  <footer>
+    Tip: If you encounter CORS errors, run the tiny proxy included in the comments of this file on your machine and point the API_URL to <code>http://localhost:3000/proxy</code>.
+  </footer>
+
+<script>
+/* ------------------------
+   Full client-side stickman using OpenRouter + Llama 3.1
+   - Replace OPENROUTER_API_KEY variable above with your key locally.
+   - If CORS blocks direct calls, run a local proxy (instructions at file bottom).
+   ------------------------ */
+
+// DOM
+const canvas = document.getElementById('stickman');
+const ctx = canvas.getContext('2d');
+const logEl = document.getElementById('log');
+const userInput = document.getElementById('userInput');
+const sendBtn = document.getElementById('sendBtn');
+const exampleBtn = document.getElementById('exampleBtn');
+const durInput = document.getElementById('dur');
+
+// State
+let currentFrame = getDefaultFrame();
+let targetFrame = null;
+let animStart = 0;
+let animDur = Number(durInput.value) || 500;
+
+function lerp(a,b,t){return a + (b-a)*t}
+
+function interpolateFrame(a,b,t){
+  const out = JSON.parse(JSON.stringify(a));
+  if(!b) return out;
+  for(const part in out){
+    if(!b[part]) continue;
+    for(const k in out[part]){
+      if(typeof out[part][k] === 'number' && typeof b[part][k] === 'number'){
+        out[part][k] = lerp(out[part][k], b[part][k], t);
+      }
+    }
+  }
+  return out;
+}
+
+function clearCanvas(){ctx.clearRect(0,0,canvas.width,canvas.height)}
+
+function drawStickman(frame){
+  clearCanvas();
+  ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.strokeStyle = '#111'; ctx.fillStyle = '#111';
+
+  // Head
+  ctx.beginPath(); ctx.arc(frame.head.x, frame.head.y, frame.head.radius, 0, Math.PI*2); ctx.stroke();
+
+  // Eyes
+  if(frame.head.eyes){
+    for(const e of frame.head.eyes){ ctx.beginPath(); ctx.arc(e.x, e.y, Math.max(1, frame.head.radius*0.12), 0, Math.PI*2); ctx.fill(); }
+  }
+  // Mouth
+  if(frame.head.mouth){ ctx.beginPath(); ctx.moveTo(frame.head.mouth.x1, frame.head.mouth.y1); ctx.lineTo(frame.head.mouth.x2, frame.head.mouth.y2); ctx.stroke(); }
+
+  // Body
+  ctx.beginPath(); ctx.moveTo(frame.body.x1, frame.body.y1); ctx.lineTo(frame.body.x2, frame.body.y2); ctx.stroke();
+
+  // Arms
+  ctx.beginPath(); ctx.moveTo(frame.leftArm.x1, frame.leftArm.y1); ctx.lineTo(frame.leftArm.x2, frame.leftArm.y2); ctx.moveTo(frame.rightArm.x1, frame.rightArm.y1); ctx.lineTo(frame.rightArm.x2, frame.rightArm.y2); ctx.stroke();
+
+  // Legs
+  ctx.beginPath(); ctx.moveTo(frame.leftLeg.x1, frame.leftLeg.y1); ctx.lineTo(frame.leftLeg.x2, frame.leftLeg.y2); ctx.moveTo(frame.rightLeg.x1, frame.rightLeg.y1); ctx.lineTo(frame.rightLeg.x2, frame.rightLeg.y2); ctx.stroke();
+}
+
+function update(){
+  animDur = Number(durInput.value) || 500;
+  if(currentFrame && targetFrame){
+    const now = performance.now();
+    const t = Math.min(1, (now - animStart) / animDur);
+    const frame = interpolateFrame(currentFrame, targetFrame, t);
+    drawStickman(frame);
+    if(t >= 1){ currentFrame = targetFrame; targetFrame = null; }
+  } else if(currentFrame && !targetFrame){
+    drawStickman(currentFrame);
+  }
+  requestAnimationFrame(update);
+}
+requestAnimationFrame(update);
+
+function getDefaultFrame(){
+  return {
+    head: { x:250, y:70, radius:22, eyes:[{x:240,y:65},{x:260,y:65}], mouth:{x1:240,y1:85,x2:260,y2:85} },
+    body: { x1:250, y1:92, x2:250, y2:180 },
+    leftArm: { x1:250, y1:110, x2:200, y2:140 },
+    rightArm:{ x1:250, y1:110, x2:300, y2:140 },
+    leftLeg:{ x1:250, y1:180, x2:220, y2:240 },
+    rightLeg:{ x1:250, y1:180, x2:280, y2:240 }
+  };
+}
+
+function tryParseJSON(text){
+  try{ return JSON.parse(text); }catch(e){}
+  const first = text.indexOf('{');
+  const last = text.lastIndexOf('}');
+  if(first !== -1 && last !== -1 && last>first){
+    const sub = text.substring(first, last+1);
+    try{ return JSON.parse(sub); }catch(e){}
+  }
+  return null;
+}
+
+async function askOpenRouter(prompt){
+  if(typeof OPENROUTER_API_KEY !== 'string' || OPENROUTER_API_KEY === 'YOUR_KEY_HERE'){
+    throw new Error('Please paste your OpenRouter API key into the top of this file (OPENROUTER_API_KEY).');
+  }
+
+  const systemPrompt = `You are an assistant that MUST return ONLY well-formed JSON describing a stick figure drawing.\nReturn JSON only; no surrounding explanation, no backticks.\n\nThe JSON object must include these keys with numeric coordinates (numbers):\n  head: { x, y, radius, optional: eyes: [{x,y},...], optional: mouth: {x1,y1,x2,y2} }\n  body: { x1, y1, x2, y2 }\n  leftArm: { x1, y1, x2, y2 }\n  rightArm:{ x1, y1, x2, y2 }\n  leftLeg: { x1, y1, x2, y2 }\n  rightLeg:{ x1, y1, x2, y2 }\n\nCoordinates should fit a 500x360 canvas. Use numbers only. If you cannot produce JSON, return {}.`;
+
+  const body = {
+    model: MODEL,
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.2,
+    max_tokens: 800
+  };
+
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + OPENROUTER_API_KEY
+    },
+    body: JSON.stringify(body)
+  });
+
+  if(!res.ok){
+    const txt = await res.text();
+    throw new Error('OpenRouter error: ' + res.status + ' ' + txt);
+  }
+
+  const json = await res.json();
+  const content = json?.choices?.[0]?.message?.content ?? '';
+  return content;
+}
+
+function mergeWithDefault(parsed){
+  const def = getDefaultFrame();
+  const out = JSON.parse(JSON.stringify(def));
+  for(const part of ['head','body','leftArm','rightArm','leftLeg','rightLeg']){
+    if(parsed[part]){
+      for(const k in out[part]){
+        if(typeof parsed[part][k] === 'number') out[part][k] = parsed[part][k];
+      }
+      if(part === 'head'){
+        if(Array.isArray(parsed.head.eyes)) out.head.eyes = parsed.head.eyes.map(e=>({x: e.x || out.head.x-10, y: e.y || out.head.y-5}));
+        if(parsed.head.mouth && typeof parsed.head.mouth.x1 === 'number') out.head.mouth = parsed.head.mouth;
+      }
+    }
+  }
+  return out;
+}
+
+function log(msg){ logEl.textContent = msg; logEl.scrollTop = logEl.scrollHeight; }
+
+async function handleSend(){
+  const prompt = userInput.value.trim();
+  if(!prompt){ log('Type a prompt (e.g. "raise left arm").'); return; }
+  sendBtn.disabled = true; sendBtn.textContent = 'Thinking…';
+  try{
+    log('Sending prompt to model...');
+    const raw = await askOpenRouter(prompt);
+    log('RAW MODEL OUTPUT:\n' + raw + '\n\nParsing...');
+    const parsed = tryParseJSON(raw);
+    if(!parsed || Object.keys(parsed).length === 0){ log('Could not parse valid JSON. Raw output shown above. Try a simpler prompt.'); return; }
+    const frame = mergeWithDefault(parsed);
+    log('Parsed JSON:\n' + JSON.stringify(frame, null, 2));
+    if(!currentFrame) currentFrame = frame;
+    targetFrame = frame; animStart = performance.now();
+  }catch(err){ log('Error: ' + err.message); console.error(err); }
+  finally{ sendBtn.disabled = false; sendBtn.textContent = 'Send'; }
+}
+
+sendBtn.onclick = handleSend;
+exampleBtn.onclick = ()=>{ const examples = [
+  'Put right arm high, left arm low, look surprised (wide eyes).',
+  'Crouch down like sitting; head tilted left; mouth a small smile.',
+  'Jumping with both arms up and legs bent (mid-air).',
+  'Walking pose: left leg forward, right arm forward.',
+  'Look angry: furrowed brows, arms on hips.'
+]; userInput.value = examples[Math.floor(Math.random()*examples.length)]; };
+
+userInput.addEventListener('keydown', (e)=>{ if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); handleSend(); } });
+
+// draw default immediately
+drawStickman(currentFrame);
+
+/* ------------------------
+  Local proxy instructions (if you see CORS errors):
+
+1) Create a small proxy (node):
+
+   npm init -y
+   npm install express node-fetch
+
+   // proxy.js
+   const express = require('express');
+   const fetch = require('node-fetch');
+   const app = express(); app.use(express.json());
+   const OR_KEY = 'YOUR_KEY_HERE'; // paste locally only
+   app.post('/proxy', async (req,res)=>{
+     try{
+       const r = await fetch('https://api.openrouter.ai/v1/chat/completions', {
+         method:'POST', headers:{ 'Content-Type':'application/json','Authorization':'Bearer '+OR_KEY }, body: JSON.stringify(req.body)
+       });
+       const text = await r.text(); res.status(r.status).send(text);
+     }catch(e){ res.status(500).send(e.toString()); }
+   });
+   app.listen(3000, ()=>console.log('proxy running on http://localhost:3000'));
+
+2) Run: node proxy.js
+3) Edit this file's API_URL to 'http://localhost:3000/proxy' and refresh your page.
+
+Security note: keep the proxy and key on your machine. Do not share publicly.
+
+------------------------ */
+
+</script>
+</body>
+</html>
