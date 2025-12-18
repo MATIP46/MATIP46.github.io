@@ -1,23 +1,74 @@
-<!--
-Source - https://stackoverflow.com/a
-Posted by Billy Moon, modified by community. See post 'Timeline' for change history
-Retrieved 2025-12-19, License - CC BY-SA 3.0
--->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Redirecting</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<!DOCTYPE HTML>
-<html lang="en-US">
-    <head>
-        <meta charset="UTF-8">
-        <meta http-equiv="refresh" content="10; url=http://matip46.github.io/startpage">
-        <script type="text/javascript">
-            window.location.href = "http://matip46.github.io/startpage"
-        </script>
-        <title>Rederecting To StartPage</title>
-    </head>
-    <body>
-        <!-- Note: don't tell people to `click` the link, just tell them that it is a link. -->
-        If you are not redirected automatically, click <a href='http://matip46.github.io/startpage'>HERE</a>.
-    </body>
+    <script>
+        let count = 5;
+        const targetUrl = "https://matip46.github.io/startpage";
+
+        function updateCountdown() {
+            const text = document.getElementById("countdown");
+            const fallback = document.getElementById("fallback");
+
+            if (count > 0) {
+                text.textContent = "Redirecting In " + count;
+                count--;
+            } else {
+                text.textContent = "Redirecting In 0";
+                fallback.style.display = "block";
+                window.location.href = targetUrl;
+            }
+        }
+
+        window.onload = function () {
+            updateCountdown();
+            setInterval(updateCountdown, 1000);
+        };
+    </script>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+
+        #countdown {
+            font-size: 24px;
+            margin-bottom: 16px;
+        }
+
+        #fallback {
+            display: none;
+            font-size: 16px;
+        }
+
+        a {
+            color: #0066cc;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="countdown">Redirecting In 5</div>
+
+    <div id="fallback">
+        If You Aren’t Redirected Then Click <a href="https://matip46.github.io/startpage">HERE</a>
+    </div>
+
+</body>
 </html>
-
-
