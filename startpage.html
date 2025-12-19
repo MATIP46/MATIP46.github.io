@@ -1,1 +1,154 @@
-placeholder
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Terminal</title>
+<style>
+    html, body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #0b0b0b;
+        font-family: monospace;
+        color: #00ff88;
+        overflow: hidden;
+    }
+
+    #terminal {
+        box-sizing: border-box;
+        padding: 16px;
+        height: 100%;
+        width: 100%;
+        overflow: hidden;
+        white-space: pre-wrap;
+    }
+
+    .line {
+        display: block;
+        width: 100%;
+    }
+
+    .prompt {
+        color: #00ff88;
+    }
+
+    .input {
+        background: none;
+        border: none;
+        outline: none;
+        color: #00ff88;
+        font-family: monospace;
+        font-size: 1em;
+        width: 100%;
+        caret-color: #00ff88;
+    }
+
+    .error {
+        color: #ff5555;
+    }
+
+    .output {
+        color: #dddddd;
+    }
+</style>
+</head>
+<body>
+
+<div id="terminal"></div>
+
+<script>
+const terminal = document.getElementById("terminal");
+
+/* Disable all manual scrolling */
+["wheel", "touchmove"].forEach(evt =>
+    document.addEventListener(evt, e => e.preventDefault(), { passive: false })
+);
+document.addEventListener("keydown", e => {
+    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(e.key)) {
+        e.preventDefault();
+    }
+});
+
+function scrollToBottom() {
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+function createPrompt() {
+    const line = document.createElement("div");
+    line.className = "line";
+
+    const prompt = document.createElement("span");
+    prompt.className = "prompt";
+    prompt.textContent = "user@homebrew:: ";
+
+    const input = document.createElement("input");
+    input.className = "input";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+
+    input.addEventListener("keydown", e => {
+        if (e.key === "Enter") {
+            input.disabled = true;
+            runCommand(input.value.trim());
+        }
+    });
+
+    line.appendChild(prompt);
+    line.appendChild(input);
+    terminal.appendChild(line);
+
+    input.focus();
+    scrollToBottom();
+}
+
+function printOutput(text, className = "output") {
+    const line = document.createElement("div");
+    line.className = `line ${className}`;
+    line.textContent = text;
+    terminal.appendChild(line);
+    scrollToBottom();
+}
+
+function runCommand(cmd) {
+    if (!cmd) {
+        createPrompt();
+        return;
+    }
+
+    const parts = cmd.split(" ");
+    const base = parts[0];
+
+    switch (base) {
+        case "help":
+            printOutput("Available commands:");
+            printOutput("  help        Show this message");
+            printOutput("  echo <text> Print text");
+            printOutput("  date        Show current date/time");
+            printOutput("  clear       Clear the terminal");
+            break;
+
+        case "echo":
+            printOutput(parts.slice(1).join(" "));
+            break;
+
+        case "date":
+            printOutput(new Date().toString());
+            break;
+
+        case "clear":
+            terminal.innerHTML = "";
+            break;
+
+        default:
+            printOutput(`Error: command not found: ${cmd}`, "error");
+    }
+
+    createPrompt();
+}
+
+/* Initial prompt */
+createPrompt();
+</script>
+
+</body>
+</html>
