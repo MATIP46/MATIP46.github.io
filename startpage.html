@@ -6,7 +6,6 @@
 <style>
     html, body {
         margin: 0;
-        padding: 0;
         height: 100%;
         background: #0b0b0b;
         font-family: monospace;
@@ -20,35 +19,37 @@
         height: 100%;
         width: 100%;
         overflow: hidden;
-        white-space: pre-wrap;
     }
 
     .line {
-        display: block;
+        display: flex;
+        align-items: center;
         width: 100%;
     }
 
     .prompt {
-        color: #00ff88;
+        white-space: nowrap;
+        margin-right: 4px;
     }
 
     .input {
+        flex: 1;
         background: none;
         border: none;
         outline: none;
         color: #00ff88;
         font-family: monospace;
         font-size: 1em;
-        width: 100%;
         caret-color: #00ff88;
-    }
-
-    .error {
-        color: #ff5555;
     }
 
     .output {
         color: #dddddd;
+        white-space: pre-wrap;
+    }
+
+    .error {
+        color: #ff5555;
     }
 </style>
 </head>
@@ -59,12 +60,14 @@
 <script>
 const terminal = document.getElementById("terminal");
 
-/* Disable all manual scrolling */
+/* Block mouse/touch scrolling only (NOT keyboard typing) */
 ["wheel", "touchmove"].forEach(evt =>
     document.addEventListener(evt, e => e.preventDefault(), { passive: false })
 );
+
+/* Block scroll keys but allow SPACE for typing */
 document.addEventListener("keydown", e => {
-    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(e.key)) {
+    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End"].includes(e.key)) {
         e.preventDefault();
     }
 });
@@ -79,7 +82,7 @@ function createPrompt() {
 
     const prompt = document.createElement("span");
     prompt.className = "prompt";
-    prompt.textContent = "user@homebrew:: ";
+    prompt.textContent = "user@homebrew::";
 
     const input = document.createElement("input");
     input.className = "input";
@@ -89,7 +92,7 @@ function createPrompt() {
     input.addEventListener("keydown", e => {
         if (e.key === "Enter") {
             input.disabled = true;
-            runCommand(input.value.trim());
+            runCommand(input.value);
         }
     });
 
@@ -101,38 +104,40 @@ function createPrompt() {
     scrollToBottom();
 }
 
-function printOutput(text, className = "output") {
+function printLine(text, className = "output") {
     const line = document.createElement("div");
-    line.className = `line ${className}`;
+    line.className = className;
     line.textContent = text;
     terminal.appendChild(line);
     scrollToBottom();
 }
 
 function runCommand(cmd) {
-    if (!cmd) {
+    const trimmed = cmd.trim();
+
+    if (!trimmed) {
         createPrompt();
         return;
     }
 
-    const parts = cmd.split(" ");
-    const base = parts[0];
+    const parts = trimmed.split(" ");
+    const command = parts[0];
 
-    switch (base) {
+    switch (command) {
         case "help":
-            printOutput("Available commands:");
-            printOutput("  help        Show this message");
-            printOutput("  echo <text> Print text");
-            printOutput("  date        Show current date/time");
-            printOutput("  clear       Clear the terminal");
+            printLine("Available commands:");
+            printLine("help");
+            printLine("echo <text>");
+            printLine("date");
+            printLine("clear");
             break;
 
         case "echo":
-            printOutput(parts.slice(1).join(" "));
+            printLine(parts.slice(1).join(" "));
             break;
 
         case "date":
-            printOutput(new Date().toString());
+            printLine(new Date().toString());
             break;
 
         case "clear":
@@ -140,13 +145,13 @@ function runCommand(cmd) {
             break;
 
         default:
-            printOutput(`Error: command not found: ${cmd}`, "error");
+            printLine(`Error: command not found: ${trimmed}`, "error");
     }
 
     createPrompt();
 }
 
-/* Initial prompt */
+/* Start terminal */
 createPrompt();
 </script>
 
