@@ -1,248 +1,189 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Advanced Terminal</title>
+<title>Terminal</title>
 <style>
 html,body{margin:0;height:100%;background:#0b0b0b;font-family:monospace;overflow:hidden}
-#terminal{padding:16px;height:100%;color:#00ff88;overflow-y:auto;}
-.line{font-size:14px;line-height:1.4;white-space:pre-wrap}
-.prompt-line{display:flex}
+#term{height:100%;padding:14px;color:#00ff88;overflow-y:auto}
+.line{white-space:pre-wrap;line-height:1.4}
+.promptline{display:flex}
 .prompt{margin-right:4px}
-.input{flex:1;background:none;border:none;outline:none;color:inherit;font:inherit}
+.input{flex:1;background:none;border:none;outline:none;color:inherit;font:inherit;padding:0}
 .output{color:#ddd}
-.error{color:#ff5555}
+.error{color:#ff5555;font-weight:bold}
 </style>
 </head>
 <body>
-<div id="terminal"></div>
-
+<div id="term"></div>
 <script>
-const term=document.getElementById("terminal");
+/* ================= STATE ================= */
+const term=document.getElementById("term");
+const vars={};
+const history=[];
+let hIndex=0;
+let username=localStorage.getItem("username")||"user";
+let lastOutput="";
 
-/* ---------- VARIABLES ---------- */
-const vars = {};
-function replaceVars(str){ return str.replace(/\$(\w+)/g,(_,v)=>vars[v]||""); }
-function replaceVarsInArgs(args){ return args.map(replaceVars); }
-
-/* ---------- FILESYSTEM ---------- */
-let fs={"/":{}}, cwd="/";
-function parseVec(v){ return v.split(",").map(Number); }
-function parseMat(m){ return m.split(";").map(r=>r.split(",").map(Number)); }
-function formatVec(v){ return v.join(","); }
-function formatMat(m){ return m.map(r=>r.join(",")).join(";"); }
-
-/* ---------- SAFE MATH ---------- */
-function safeMath(expr){
- const allowed=/^[0-9+\-*/%.(), \t_a-zA-Z$]+$/;
- if(!allowed.test(expr)) throw new Error("invalid characters in expression");
- const scope={
- sin:Math.sin, cos:Math.cos, tan:Math.tan,
- asin:Math.asin, acos:Math.acos, atan:Math.atan,
- sqrt:Math.sqrt, cbrt:Math.cbrt, abs:Math.abs,
- log:Math.log, log10:Math.log10, pow:Math.pow,
- min:Math.min, max:Math.max, round:Math.round,
- floor:Math.floor, ceil:Math.ceil, pi:Math.PI, e:Math.E
- };
- const keys=Object.keys(scope);
- const values=Object.values(scope);
- return Function(...keys, `"use strict"; return (${expr})`)(...values);
+/* ================= PRINT ================= */
+function print(text, cls="output", target=term){
+  const d=document.createElement("div");
+  d.className="line "+cls;
+  d.textContent=text;
+  target.appendChild(d);
+  term.scrollTop=term.scrollHeight;
 }
 
-/* ---------- ARG ERROR ---------- */
-function argError(name,exp,got){ print(`${name}: expected ${exp} argument${exp!==1?"s":""}, got ${got}`,"error"); }
-
-/* ---------- USERNAME ---------- */
-let username = localStorage.getItem("username") || "user";
-function setUsername(name){
-  username = name;
-  localStorage.setItem("username",name);
-}
-
-/* ---------- PRINT ---------- */
-function print(t,c="output"){
-    const d=document.createElement("div");
-    d.className="line "+c;
-    d.textContent=t;
-    const scrollAtBottom = term.scrollHeight - term.scrollTop - term.clientHeight < 50;
-    term.appendChild(d);
-    if(scrollAtBottom) term.scrollTop = term.scrollHeight;
-}
-
-/* ---------- COMMANDS ---------- */
-const commands={};
-
-/* Help */
-commands.help = async () => {
- print("=== Terminal Help ===");
- print("Basic commands: help, echo, clear, pwd, set <var=value>, name <username>");
- print("\nMath commands:");
- print("math <expr>       Evaluate expression with + - * / % ( ) and functions");
- print("add x y           Addition");
- print("sub x y           Subtraction");
- print("mul x y           Multiplication");
- print("div x y           Division");
- print("Advanced math functions: sin, cos, tan, asin, acos, atan, sqrt, cbrt, abs, log, log10, pow, min, max, round, floor, ceil, pi, e");
- print("\nVector & Matrix commands:");
- print("vec 1,2,3               Create vector");
- print("vadd v1 v2              Add vectors");
- print("vdot v1 v2              Dot product");
- print("mmul m1 m2              Multiply matrices");
- print("\nStatistics commands:");
- print("stat n1,n2,...          count, min, max, mean, median, variance, stddev");
- print("\nBig integer commands:");
- print("big <expr>              Evaluate large integers");
- print("\nPlotting commands:");
- print("plot n1,n2,...          ASCII plot");
- print("\nFilesystem commands:");
- print("ls, cd <dir>, mkdir <dir>, touch <file>, cat <file>");
- print("\nVariables:");
- print("set var=value            Create variable");
- print("$var                     Use variable in commands, math, vectors, etc.");
- print("\nScripting & pipes:");
- print("Command chaining: cmd1 ; cmd2 ; cmd3");
- print("Pipes: cmd1 | cmd2");
- print("Conditional: if <cond> then <cmd>");
- print("Loops: while <cond> do <cmd>");
- print("\nNetworking commands:");
- print("ping <url>               Ping repeatedly until key press (Shift+Tab for variables)");
- print("url <url>                Redirect current page");
- print("urlwindow <url>          Open URL in new window/tab");
- print("\nOther: Tab autocompletion (Tab for commands, Shift+Tab for variables), Arrow keys for history");
-};
-
-/* Basic */
-commands.echo = async a => print(replaceVarsInArgs(a).join(" "));
-commands.clear = async()=>term.innerHTML="";
-commands.pwd = async()=>print(cwd);
-commands.set = async([x])=>{
- if(!x||!x.includes("=")) return argError("set",1,arguments.length);
- const[k,v]=x.split("="); vars[k]=v;
-};
-commands.name = async a=>{
- a=replaceVarsInArgs(a);
- if(a.length!==1) return argError("name",1,a.length);
- setUsername(a[0]);
-};
-
-/* URL */
-commands.url=async a=>{
- a=replaceVarsInArgs(a);
- if(a.length!==1) return argError("url",1,a.length);
- location.href=a[0];
-};
-commands.urlwindow=async a=>{
- a=replaceVarsInArgs(a);
- if(a.length!==1) return argError("urlwindow",1,a.length);
- window.open(a[0],"_blank");
-};
-
-/* PING with colored single-line */
-commands.ping = async a => {
-  a = replaceVarsInArgs(a);
-  if (a.length !== 1) return argError("ping", 1, a.length);
-
-  let running = true;
-  let sent = 0, received = 0;
-  const results = [];
-
-  print(`PING ${a[0]} — press any key to stop`);
-  const stop = () => running = false;
-  document.addEventListener("keydown", stop, { once: true });
-
-  const dynamicLine = document.createElement("div");
-  dynamicLine.className = "line";
-  term.appendChild(dynamicLine);
-
-  while (running) {
-    sent++;
-    const start = performance.now();
-    let pingTime;
-    try {
-      await fetch(a[0], { mode: "no-cors" });
-      pingTime = (performance.now() - start).toFixed(1);
-      results.push(Number(pingTime));
-      received++;
-      dynamicLine.textContent = `Reply from ${a[0]}: time=${pingTime}ms | Sent: ${sent}, Received: ${received}, Lost: ${sent - received} (${((sent - received)/sent*100).toFixed(1)}%)`;
-      dynamicLine.style.color = "#00ff88"; // green success
-    } catch {
-      pingTime = "timeout";
-      dynamicLine.textContent = `Reply from ${a[0]}: time=${pingTime} | Sent: ${sent}, Received: ${received}, Lost: ${sent - received} (${((sent - received)/sent*100).toFixed(1)}%)`;
-      dynamicLine.style.color = "#ff5555"; // red timeout
-    }
-    term.scrollTop = term.scrollHeight;
-    await new Promise(r => setTimeout(r, 1000));
-  }
-
-  term.removeChild(dynamicLine);
-
-  const lost = sent - received;
-  const lossPercent = ((lost / sent) * 100).toFixed(1);
-  const avg = received ? (results.reduce((a,b)=>a+b,0)/results.length).toFixed(1) : 0;
-  print(`--- ping statistics ---`);
-  print(`${sent} packets transmitted, ${received} received, ${lost} lost (${lossPercent}%)`);
-  if(received) print(`Average time: ${avg}ms`);
-};
-
-/* Math */
-commands.math = async (args,input="")=>{
- if(!args.length&&!input) return argError("math",1,0);
- let expr = args.join(" ");
- if(input) expr = expr.replace(/\$input/g,input.trim());
- expr = replaceVars(expr);
- try{ print(String(safeMath(expr))); return String(safeMath(expr)); }
- catch(e){ print(`math: ${e.message}`,"error"); return ""; }
-};
-
-["add","sub","mul","div"].forEach(op=>{
- commands[op]=async a=>{
-  a=replaceVarsInArgs(a);
-  if(a.length!==2) return argError(op,2,a.length);
-  if(op==="div" && Number(a[1])===0){ print("div: division by zero","error"); return; }
-  const res=op==="add"?Number(a[0])+Number(a[1]):op==="sub"?Number(a[0])-Number(a[1]):op==="mul"?Number(a[0])*Number(a[1]):Number(a[0])/Number(a[1]);
-  print(res);
- };
-});
-
-/* Vector, Matrix, Stats, Big, Plot, Filesystem omitted for brevity (same as previous code) */
-
-/* Tab completion */
-function getCompletions(input, onlyVars=false){
-    const parts = input.split(/\s+/);
-    const last = parts[parts.length-1];
-    let options = onlyVars ? Object.keys(vars).map(v=>"$"+v) : Object.keys(commands);
-    return options.filter(opt=>opt.startsWith(last));
-}
-async function handleTab(e, inputElement){
-    if(e.key==="Tab"){
-        e.preventDefault();
-        const val = inputElement.value;
-        const onlyVars = e.shiftKey; // Shift+Tab → variables only
-        const matches = getCompletions(val, onlyVars);
-        const parts = val.split(/\s+/);
-        const last = parts.pop();
-        if(matches.length===1){ parts.push(matches[0]); inputElement.value = parts.join(" ")+" "; }
-        else if(matches.length>1) print(matches.join(" "));
-    }
-}
-
-/* Prompt */
-let history=[],hIndex=0;
+/* ================= PROMPT ================= */
 function prompt(){
- const l=document.createElement("div");
- l.className="line prompt-line";
- const p=document.createElement("span"); p.className="prompt"; p.textContent=username+"@homebrew::";
- const i=document.createElement("input"); i.className="input";
- i.onkeydown=async e=>{
-    await handleTab(e,i);
-    if(e.key==="Enter"){ i.disabled=true; const v=i.value.trim(); history.push(v); hIndex=history.length; for(const cmd of v.split(";")) await runLine(cmd.trim()); prompt(); }
-    if(e.key==="ArrowUp"){ hIndex=Math.max(0,hIndex-1); i.value=history[hIndex]||""; e.preventDefault(); }
-    if(e.key==="ArrowDown"){ hIndex=Math.min(history.length,hIndex+1); i.value=history[hIndex]||""; e.preventDefault(); }
- };
- l.append(p,i); term.appendChild(l); i.focus(); term.scrollTop = term.scrollHeight;
+  const row=document.createElement("div");
+  row.className="line promptline";
+
+  const p=document.createElement("span");
+  p.className="prompt";
+  p.textContent=`${username}@homebrew::`;
+
+  const i=document.createElement("input");
+  i.className="input";
+
+  const outputBlock=document.createElement("div");
+  outputBlock.className="output-block";
+
+  i.onkeydown=async e=>{
+    if(e.key==="Enter"){
+      const v=i.value.trim();
+      history.push(v);
+      hIndex=history.length;
+      i.disabled=true;
+      await execute(v, outputBlock);
+      prompt();
+    }
+    if(e.key==="ArrowUp"){
+      hIndex=Math.max(0,hIndex-1);
+      i.value=history[hIndex]||"";
+      e.preventDefault();
+    }
+    if(e.key==="ArrowDown"){
+      hIndex=Math.min(history.length,hIndex+1);
+      i.value=history[hIndex]||"";
+      e.preventDefault();
+    }
+    if(e.key==="Tab"){
+      e.preventDefault();
+      autocomplete(i,e.shiftKey);
+    }
+    if(e.ctrlKey && e.key==="l"){
+      term.innerHTML="";
+      prompt();
+    }
+  };
+
+  row.append(p,i);
+  term.append(row,outputBlock);
+  i.focus();
+  term.scrollTop=term.scrollHeight;
 }
 
-/* Start */
+/* ================= AUTOCOMPLETE ================= */
+function autocomplete(input,varsOnly){
+  const text=input.value;
+  const list=varsOnly?Object.keys(vars):Object.keys(cmds);
+  const match=list.filter(c=>c.startsWith(text));
+  if(match.length===1) input.value=match[0];
+}
+
+/* ================= EXECUTION ================= */
+async function execute(line, block){
+  lastOutput="";
+  for(const part of line.split("|").map(s=>s.trim())){
+    lastOutput=await run(part,lastOutput,block);
+  }
+}
+
+async function run(line,input,block){
+  if(!line)return "";
+  const parts=line.split(/\s+/);
+  const cmd=parts[0];
+  const args=parts.slice(1).map(a=>{
+    if(a.startsWith("$")) return vars[a.slice(1)]??"";
+    return a;
+  });
+  if(cmds[cmd]) return await cmds[cmd](args,input,block);
+  print(`command not found: ${cmd}`,"error",block);
+  return "";
+}
+
+/* ================= COMMANDS ================= */
+const cmds={};
+
+cmds.help=(a,i,b)=>{
+  print("Commands:", "output", b);
+  Object.keys(cmds).forEach(c=>print(" "+c,"output",b));
+};
+
+cmds.clear=(a,i,b)=>term.innerHTML="";
+
+cmds.echo=(a,i,b)=>{
+  const t=a.join(" ");
+  print(t,"output",b);
+  return t;
+};
+
+cmds.name=(a,i,b)=>{
+  if(a.length!==1){
+    print(`name: expected 1 argument, got ${a.length}`,"error",b);
+    return;
+  }
+  username=a[0];
+  localStorage.setItem("username",username);
+};
+
+cmds.set=(a,i,b)=>{
+  if(a.length!==1||!a[0].includes("=")){
+    print("set: expected name=value","error",b);
+    return;
+  }
+  const [k,v]=a[0].split("=");
+  vars[k]=v;
+};
+
+cmds.math=(a,i,b)=>{
+  try{
+    const r=Function("return "+(a.join(" ")||i))();
+    print(r,"output",b);
+    return r;
+  }catch{
+    print("math error","error",b);
+  }
+};
+
+cmds.advmath=(a,i,b)=>{
+  try{
+    const r=Function("with(Math){return "+(a.join(" ")||i)+"}")();
+    print(r,"output",b);
+    return r;
+  }catch{
+    print("advanced math error","error",b);
+  }
+};
+
+cmds.url=(a,i,b)=>{
+  if(a.length!==1){
+    print(`url: expected 1 argument, got ${a.length}`,"error",b);
+    return;
+  }
+  location.href=a[0];
+};
+
+cmds.urlwindow=(a,i,b)=>{
+  if(a.length!==1){
+    print(`urlwindow: expected 1 argument, got ${a.length}`,"error",b);
+    return;
+  }
+  window.open(a[0],"_blank");
+};
+
+/* ================= START ================= */
 prompt();
 </script>
 </body>
