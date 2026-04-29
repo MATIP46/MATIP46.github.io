@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI OS Desktop</title>
+
+<style>
+body {
+    margin:0;
+    font-family:sans-serif;
+    background:black;
+    color:white;
+    overflow:hidden;
+}
+
+/* BOOT SCREEN */
+#boot {
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+}
+
+/* DESKTOP */
+#desktop {
+    display:none;
+    height:100vh;
+    background:#111;
+    padding:20px;
+}
+
+/* ICONS */
+.icon {
+    width:90px;
+    text-align:center;
+    display:inline-block;
+    margin:10px;
+    cursor:pointer;
+}
+
+.icon img {
+    width:48px;
+    height:48px;
+}
+
+/* TASKBAR */
+#taskbar {
+    position:fixed;
+    bottom:0;
+    width:100%;
+    height:40px;
+    background:#222;
+    display:flex;
+    align-items:center;
+    padding:5px;
+}
+
+/* WINDOW */
+.window {
+    position:absolute;
+    width:280px;
+    height:200px;
+    background:#333;
+    border:1px solid #555;
+    padding:5px;
+    overflow:auto;
+}
+</style>
+
+</head>
+<body>
+
+<!-- BOOT -->
+<div id="boot">
+    <h2>AI OS Booting...</h2>
+    <p id="bootText">Starting kernel</p>
+</div>
+
+<!-- DESKTOP -->
+<div id="desktop">
+
+    <div class="icon" onclick="openApp('terminal')">
+        <img src="assets/icons/terminal.png">
+        <div>Terminal</div>
+    </div>
+
+    <div class="icon" onclick="openApp('notes')">
+        <img src="assets/icons/notes.png">
+        <div>Notes</div>
+    </div>
+
+    <div class="icon" onclick="openApp('files')">
+        <img src="assets/icons/files.png">
+        <div>Files</div>
+    </div>
+
+    <div class="icon" onclick="openApp('goals')">
+        <img src="assets/icons/goals.png">
+        <div>Goals</div>
+    </div>
+
+</div>
+
+<div id="taskbar">
+    <span id="status">Booting...</span>
+</div>
+
+<script type="module">
+
+import * as webllm from "https://esm.run/@mlc-ai/web-llm";
+
+/////////////////////////////////////////////////////
+// 🤖 AI ENGINE
+/////////////////////////////////////////////////////
+
+let engine;
+
+/////////////////////////////////////////////////////
+// 💾 VIRTUAL FILE SYSTEM
+/////////////////////////////////////////////////////
+
+let FS = JSON.parse(localStorage.getItem("FS") || "{}");
+
+function writeFile(path, data){
+    FS[path] = data;
+    localStorage.setItem("FS", JSON.stringify(FS));
+}
+
+function readFile(path){
+    return FS[path] || "";
+}
+
+function listFiles(){
+    return Object.keys(FS);
+}
+
+/////////////////////////////////////////////////////
+// 🧠 KERNEL STATE
+/////////////////////////////////////////////////////
+
+let KERNEL = {
+    goals: [],
+    memory: {},
+    tick: 0
+};
+
+function addGoal(text){
+    KERNEL.goals.push({
+        text,
+        status:"pending"
+    });
+}
+
+function nextGoal(){
+    return KERNEL.goals.find(g => g.status === "pending");
+}
+
+/////////////////////////////////////////////////////
+// 🧠 MEMORY SYSTEM
+/////////////////////////////////////////////////////
+
+function learn(text){
+    let words = text.toLowerCase().split(/\W+/).filter(Boolean);
+
+    for(let w of words){
+        KERNEL.memory[w] = (KERNEL.memory[w] || 0) + 1;
+    }
+}
+
+function memorySummary(){
+    return Object.entries(KERNEL.memory)
+        .sort((a,b)=>b[1]-a[1])
+        .slice(0,6)
+        .map(x=>x[0])
+        .join(", ");
+}
+
+/////////////////////////////////////////////////////
+// 🧠 BOOT SEQUENCE
+/////////////////////////////////////////////////////
+
+let bootSteps = [
+    "Initializing kernel...",
+    "Mounting filesystem...",
+    "Loading AI model...",
+    "Starting scheduler...",
+    "Launching desktop..."
+];
+
+let i = 0;
+
+function bootNext(){
+    if(i < bootSteps.length){
+        document.getElementById("bootText").innerText = bootSteps[i];
+        i++;
+        setTimeout(bootNext, 900);
+    } else {
+        startOS();
+    }
+}
+
+/////////////////////////////////////////////////////
+// 🧠 APPS SYSTEM
+/////////////////////////////////////////////////////
+
+function createWindow(title, content){
+    let w = document.createElement("div");
+    w.className = "window";
+    w.style.left = (50 + Math.random()*100) + "px";
+    w.style.top = (50 + Math.random()*100) + "px";
+
+    w.innerHTML = `
+        <b>${title}</b><br>
+        <div>${content}</div>
+        <button onclick="this.parentElement.remove()">close</button>
+    `;
+
+    document.body.appendChild(w);
+}
+
+window.openApp = function(app){
+
+    if(app === "notes"){
+        createWindow("Notes",
+            `<textarea id="t" style="width:100%;height:140px;">${readFile("notes.txt")}</textarea>
+             <button onclick="save()">Save</button>`
+        );
+
+        window.save = () => {
+            writeFile("notes.txt", document.getElementById("t").value);
+        };
+    }
+
+    if(app === "files"){
+        createWindow("Files", listFiles().join("<br>"));
+    }
+
+    if(app === "goals"){
+        createWindow("Goals",
+            KERNEL.goals.map(g => g.text).join("<br>")
+        );
+    }
+
+    if(app === "terminal"){
+        let cmd = prompt("AI Command:");
+        AI(cmd).then(r => createWindow("AI", r));
+    }
+};
+
+/////////////////////////////////////////////////////
+// 🤖 AI CORE
+/////////////////////////////////////////////////////
+
+async function AI(input){
+
+    let prompt = `
+You are an AI OS.
+
+Memory:
+${memorySummary()}
+
+Filesystem:
+${listFiles().join(", ")}
+
+User:
+${input}
+
+Respond concisely.
+`;
+
+    let res = await engine.chat.completions.create({
+        messages:[{role:"user", content:prompt}]
+    });
+
+    return res.choices[0].message.content;
+}
+
+/////////////////////////////////////////////////////
+// 🧠 BACKGROUND KERNEL LOOP
+/////////////////////////////////////////////////////
+
+function kernelTick(){
+
+    KERNEL.tick++;
+
+    // autonomous goal generation
+    if(KERNEL.tick % 6 === 0){
+        addGoal("Improve system memory organization");
+        addGoal("Review file system structure");
+    }
+
+    // process goals
+    let g = nextGoal();
+    if(g){
+        AI(g.text).then(r=>{
+            learn(r);
+            g.status = "done";
+        });
+    }
+}
+
+/////////////////////////////////////////////////////
+// 🚀 START OS
+/////////////////////////////////////////////////////
+
+async function startOS(){
+
+    document.getElementById("boot").style.display = "none";
+    document.getElementById("desktop").style.display = "block";
+    document.getElementById("status").innerText = "Loading AI...";
+
+    const model = "Llama-3.1-1B-Instruct-q4f32_1-MLC";
+
+    engine = await webllm.CreateMLCEngine(model, {
+        initProgressCallback:(p)=>{
+            document.getElementById("status").innerText =
+                "AI loading... " + Math.round(p.progress*100) + "%";
+        }
+    });
+
+    document.getElementById("status").innerText = "AI OS Online ✔";
+
+    setInterval(kernelTick, 2000);
+}
+
+/////////////////////////////////////////////////////
+// BOOT
+/////////////////////////////////////////////////////
+
+bootNext();
+
+</script>
+
+</body>
+</html>
