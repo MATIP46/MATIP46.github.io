@@ -13,21 +13,23 @@ body {
     overflow:hidden;
 }
 
-/* BOOT SCREEN */
+/* BOOT */
 #boot {
     display:flex;
-    flex-direction:column;
     justify-content:center;
     align-items:center;
     height:100vh;
+    flex-direction:column;
 }
 
 /* DESKTOP */
 #desktop {
     display:none;
     height:100vh;
-    background:#111;
+    background-size:cover;
+    background-position:center;
     padding:20px;
+    position:relative;
 }
 
 /* ICONS */
@@ -37,6 +39,8 @@ body {
     display:inline-block;
     margin:10px;
     cursor:pointer;
+    position:relative;
+    z-index:2;
 }
 
 .icon img {
@@ -59,8 +63,8 @@ body {
 /* WINDOW */
 .window {
     position:absolute;
-    width:280px;
-    height:200px;
+    width:300px;
+    height:220px;
     background:#333;
     border:1px solid #555;
     padding:5px;
@@ -71,13 +75,11 @@ body {
 </head>
 <body>
 
-<!-- BOOT -->
 <div id="boot">
     <h2>AI OS Booting...</h2>
-    <p id="bootText">Starting kernel</p>
+    <p id="bootText">Starting kernel...</p>
 </div>
 
-<!-- DESKTOP -->
 <div id="desktop">
 
     <div class="icon" onclick="openApp('terminal')">
@@ -100,6 +102,11 @@ body {
         <div>Goals</div>
     </div>
 
+    <div class="icon" onclick="openApp('settings-wallpaper')">
+        <img src="assets/icons/settings.png">
+        <div>Wallpaper</div>
+    </div>
+
 </div>
 
 <div id="taskbar">
@@ -110,14 +117,10 @@ body {
 
 import * as webllm from "https://esm.run/@mlc-ai/web-llm";
 
-/////////////////////////////////////////////////////
-// 🤖 AI ENGINE
-/////////////////////////////////////////////////////
-
 let engine;
 
 /////////////////////////////////////////////////////
-// 💾 VIRTUAL FILE SYSTEM
+// 💾 FILE SYSTEM
 /////////////////////////////////////////////////////
 
 let FS = JSON.parse(localStorage.getItem("FS") || "{}");
@@ -136,7 +139,7 @@ function listFiles(){
 }
 
 /////////////////////////////////////////////////////
-// 🧠 KERNEL STATE
+// 🧠 KERNEL
 /////////////////////////////////////////////////////
 
 let KERNEL = {
@@ -146,10 +149,7 @@ let KERNEL = {
 };
 
 function addGoal(text){
-    KERNEL.goals.push({
-        text,
-        status:"pending"
-    });
+    KERNEL.goals.push({text, status:"pending"});
 }
 
 function nextGoal(){
@@ -157,12 +157,11 @@ function nextGoal(){
 }
 
 /////////////////////////////////////////////////////
-// 🧠 MEMORY SYSTEM
+// 🧠 MEMORY
 /////////////////////////////////////////////////////
 
 function learn(text){
     let words = text.toLowerCase().split(/\W+/).filter(Boolean);
-
     for(let w of words){
         KERNEL.memory[w] = (KERNEL.memory[w] || 0) + 1;
     }
@@ -177,79 +176,26 @@ function memorySummary(){
 }
 
 /////////////////////////////////////////////////////
-// 🧠 BOOT SEQUENCE
+// 🖼️ WALLPAPER SYSTEM
 /////////////////////////////////////////////////////
 
-let bootSteps = [
-    "Initializing kernel...",
-    "Mounting filesystem...",
-    "Loading AI model...",
-    "Starting scheduler...",
-    "Launching desktop..."
+let WALLPAPERS = [
+    "default.jpg"
 ];
 
-let i = 0;
+function setWallpaper(name){
+    document.getElementById("desktop").style.backgroundImage =
+        `url('assets/wallpapers/${name}')`;
+    localStorage.setItem("wallpaper", name);
+}
 
-function bootNext(){
-    if(i < bootSteps.length){
-        document.getElementById("bootText").innerText = bootSteps[i];
-        i++;
-        setTimeout(bootNext, 900);
-    } else {
-        startOS();
-    }
+function loadWallpaper(){
+    let saved = localStorage.getItem("wallpaper") || "default.jpg";
+    setWallpaper(saved);
 }
 
 /////////////////////////////////////////////////////
-// 🧠 APPS SYSTEM
-/////////////////////////////////////////////////////
-
-function createWindow(title, content){
-    let w = document.createElement("div");
-    w.className = "window";
-    w.style.left = (50 + Math.random()*100) + "px";
-    w.style.top = (50 + Math.random()*100) + "px";
-
-    w.innerHTML = `
-        <b>${title}</b><br>
-        <div>${content}</div>
-        <button onclick="this.parentElement.remove()">close</button>
-    `;
-
-    document.body.appendChild(w);
-}
-
-window.openApp = function(app){
-
-    if(app === "notes"){
-        createWindow("Notes",
-            `<textarea id="t" style="width:100%;height:140px;">${readFile("notes.txt")}</textarea>
-             <button onclick="save()">Save</button>`
-        );
-
-        window.save = () => {
-            writeFile("notes.txt", document.getElementById("t").value);
-        };
-    }
-
-    if(app === "files"){
-        createWindow("Files", listFiles().join("<br>"));
-    }
-
-    if(app === "goals"){
-        createWindow("Goals",
-            KERNEL.goals.map(g => g.text).join("<br>")
-        );
-    }
-
-    if(app === "terminal"){
-        let cmd = prompt("AI Command:");
-        AI(cmd).then(r => createWindow("AI", r));
-    }
-};
-
-/////////////////////////////////////////////////////
-// 🤖 AI CORE
+// 🤖 AI
 /////////////////////////////////////////////////////
 
 async function AI(input){
@@ -260,13 +206,11 @@ You are an AI OS.
 Memory:
 ${memorySummary()}
 
-Filesystem:
+Files:
 ${listFiles().join(", ")}
 
 User:
 ${input}
-
-Respond concisely.
 `;
 
     let res = await engine.chat.completions.create({
@@ -277,56 +221,181 @@ Respond concisely.
 }
 
 /////////////////////////////////////////////////////
-// 🧠 BACKGROUND KERNEL LOOP
+// 🤖 AI WALLPAPER SUGGEST
+/////////////////////////////////////////////////////
+
+async function AI_SUGGEST_WALLPAPER(){
+
+    let res = await engine.chat.completions.create({
+        messages:[{
+            role:"user",
+            content:`
+Pick best wallpaper from:
+${WALLPAPERS.join(", ")}
+
+Memory:
+${memorySummary()}
+
+Reply ONLY filename.
+`
+        }]
+    });
+
+    let txt = res.choices[0].message.content.trim();
+
+    if(!WALLPAPERS.includes(txt)){
+        return WALLPAPERS[Math.floor(Math.random()*WALLPAPERS.length)];
+    }
+
+    return txt;
+}
+
+/////////////////////////////////////////////////////
+// 🖥️ WINDOW
+/////////////////////////////////////////////////////
+
+function createWindow(title, content){
+    let w = document.createElement("div");
+    w.className = "window";
+    w.style.left = (50 + Math.random()*100) + "px";
+    w.style.top = (50 + Math.random()*100) + "px";
+
+    w.innerHTML = `
+        <b>${title}</b><br>
+        ${content}
+        <button onclick="this.parentElement.remove()">close</button>
+    `;
+
+    document.body.appendChild(w);
+}
+
+/////////////////////////////////////////////////////
+// 🧩 APPS
+/////////////////////////////////////////////////////
+
+window.openApp = function(app){
+
+    if(app==="notes"){
+        createWindow("Notes",
+        `<textarea id="t" style="width:100%;height:120px;">${readFile("notes.txt")}</textarea>
+         <button onclick="save()">Save</button>`);
+
+        window.save = ()=>writeFile("notes.txt",document.getElementById("t").value);
+    }
+
+    if(app==="files"){
+        createWindow("Files", listFiles().join("<br>"));
+    }
+
+    if(app==="goals"){
+        createWindow("Goals", KERNEL.goals.map(g=>g.text).join("<br>"));
+    }
+
+    if(app==="terminal"){
+        let cmd = prompt("AI Command:");
+        AI(cmd).then(r=>createWindow("AI", r));
+    }
+
+    if(app==="settings-wallpaper"){
+
+        let list = WALLPAPERS.map(w=>`
+            <img src="assets/wallpapers/${w}" 
+                 style="width:80px;height:50px;cursor:pointer;"
+                 onclick="preview('${w}')">
+        `).join("");
+
+        createWindow("Wallpaper",
+        `${list}
+        <hr>
+        <img id="previewImg" style="width:100%;height:80px;">
+        <button onclick="apply()">Apply</button>
+        <button onclick="suggest()">AI Suggest</button>`);
+
+        window.preview = (w)=>{
+            document.getElementById("previewImg").src =
+                "assets/wallpapers/"+w;
+            window._w = w;
+        };
+
+        window.apply = ()=>{
+            if(window._w) setWallpaper(window._w);
+        };
+
+        window.suggest = async ()=>{
+            let s = await AI_SUGGEST_WALLPAPER();
+            preview(s);
+        };
+    }
+};
+
+/////////////////////////////////////////////////////
+// 🔁 KERNEL LOOP
 /////////////////////////////////////////////////////
 
 function kernelTick(){
 
     KERNEL.tick++;
 
-    // autonomous goal generation
     if(KERNEL.tick % 6 === 0){
-        addGoal("Improve system memory organization");
-        addGoal("Review file system structure");
+        addGoal("Improve memory");
+        addGoal("Review files");
     }
 
-    // process goals
     let g = nextGoal();
+
     if(g){
         AI(g.text).then(r=>{
             learn(r);
-            g.status = "done";
+            g.status="done";
         });
     }
 }
 
 /////////////////////////////////////////////////////
-// 🚀 START OS
+// 🚀 START
 /////////////////////////////////////////////////////
 
 async function startOS(){
 
-    document.getElementById("boot").style.display = "none";
-    document.getElementById("desktop").style.display = "block";
-    document.getElementById("status").innerText = "Loading AI...";
+    document.getElementById("boot").style.display="none";
+    document.getElementById("desktop").style.display="block";
+
+    loadWallpaper();
 
     const model = "Llama-3.1-1B-Instruct-q4f32_1-MLC";
 
-    engine = await webllm.CreateMLCEngine(model, {
+    engine = await webllm.CreateMLCEngine(model,{
         initProgressCallback:(p)=>{
             document.getElementById("status").innerText =
-                "AI loading... " + Math.round(p.progress*100) + "%";
+                "AI loading "+Math.round(p.progress*100)+"%";
         }
     });
 
-    document.getElementById("status").innerText = "AI OS Online ✔";
+    document.getElementById("status").innerText="AI OS Online ✔";
 
-    setInterval(kernelTick, 2000);
+    setInterval(kernelTick,2000);
 }
 
 /////////////////////////////////////////////////////
 // BOOT
 /////////////////////////////////////////////////////
+
+let steps=[
+    "Initializing kernel...",
+    "Mounting filesystem...",
+    "Loading AI...",
+    "Starting OS..."
+];
+
+let i=0;
+
+function bootNext(){
+    if(i<steps.length){
+        document.getElementById("bootText").innerText=steps[i];
+        i++;
+        setTimeout(bootNext,800);
+    } else startOS();
+}
 
 bootNext();
 
