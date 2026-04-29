@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Buckshot Lite</title>
+<style>
+body {
+  background: #111;
+  color: #eee;
+  font-family: monospace;
+  text-align: center;
+}
+
+#game {
+  margin-top: 40px;
+}
+
+button {
+  background: #222;
+  color: #fff;
+  border: 1px solid #555;
+  padding: 10px;
+  margin: 5px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #444;
+}
+
+#log {
+  margin-top: 20px;
+  height: 200px;
+  overflow-y: auto;
+  border: 1px solid #333;
+  padding: 10px;
+  text-align: left;
+}
+</style>
+</head>
+<body>
+
+<h1>Buckshot Roulette (HTML Edition)</h1>
+
+<div id="game">
+  <p>Player HP: <span id="playerHP">3</span></p>
+  <p>Dealer HP: <span id="dealerHP">3</span></p>
+
+  <button onclick="shoot('dealer')">Shoot Dealer</button>
+  <button onclick="shoot('self')">Shoot Yourself</button>
+</div>
+
+<div id="log"></div>
+
+<script>
+let playerHP = 3;
+let dealerHP = 3;
+
+let shells = [];
+let turn = "player";
+
+const log = (msg) => {
+  document.getElementById("log").innerHTML += msg + "<br>";
+};
+
+function updateUI() {
+  playerHPEl.textContent = playerHP;
+  dealerHPEl.textContent = dealerHP;
+}
+
+const playerHPEl = document.getElementById("playerHP");
+const dealerHPEl = document.getElementById("dealerHP");
+
+/* ------------------ SOUND ENGINE ------------------ */
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playShot(real) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  if (real) {
+    osc.type = "square";
+    osc.frequency.value = 120;
+    gain.gain.setValueAtTime(1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+  } else {
+    osc.type = "triangle";
+    osc.frequency.value = 400;
+    gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+  }
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.3);
+}
+
+/* ------------------ GAME LOGIC ------------------ */
+
+function loadShells() {
+  shells = [];
+  let realCount = Math.floor(Math.random() * 3) + 1;
+  let blankCount = Math.floor(Math.random() * 3) + 1;
+
+  for (let i = 0; i < realCount; i++) shells.push("real");
+  for (let i = 0; i < blankCount; i++) shells.push("blank");
+
+  shells.sort(() => Math.random() - 0.5);
+
+  log(`Loaded: ${realCount} real, ${blankCount} blank`);
+}
+
+function nextShell() {
+  if (shells.length === 0) loadShells();
+  return shells.shift();
+}
+
+function shoot(target) {
+  if (turn !== "player") return;
+
+  const shell = nextShell();
+  const isReal = shell === "real";
+
+  playShot(isReal);
+
+  if (target === "dealer") {
+    log("You shoot the dealer...");
+    if (isReal) {
+      dealerHP--;
+      log("💥 HIT!");
+    } else {
+      log("...click.");
+    }
+  } else {
+    log("You shoot yourself...");
+    if (isReal) {
+      playerHP--;
+      log("💥 YOU HIT YOURSELF!");
+    } else {
+      log("...click.");
+    }
+  }
+
+  updateUI();
+  checkGame();
+  turn = "dealer";
+  setTimeout(dealerTurn, 1000);
+}
+
+function dealerTurn() {
+  if (playerHP <= 0 || dealerHP <= 0) return;
+
+  const shell = nextShell();
+  const isReal = shell === "real";
+
+  playShot(isReal);
+
+  // Simple AI: random choice
+  const target = Math.random() < 0.5 ? "player" : "self";
+
+  if (target === "player") {
+    log("Dealer shoots you...");
+    if (isReal) {
+      playerHP--;
+      log("💥 HIT!");
+    } else {
+      log("...click.");
+    }
+  } else {
+    log("Dealer shoots himself...");
+    if (isReal) {
+      dealerHP--;
+      log("💥 HE HIT HIMSELF!");
+    } else {
+      log("...click.");
+    }
+  }
+
+  updateUI();
+  checkGame();
+  turn = "player";
+}
+
+function checkGame() {
+  if (playerHP <= 0) {
+    log("<b>You lost.</b>");
+    disableButtons();
+  } else if (dealerHP <= 0) {
+    log("<b>You win!</b>");
+    disableButtons();
+  }
+}
+
+function disableButtons() {
+  document.querySelectorAll("button").forEach(b => b.disabled = true);
+}
+
+/* Start game */
+loadShells();
+updateUI();
+</script>
+
+</body>
+</html>
